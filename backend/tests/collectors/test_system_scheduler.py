@@ -8,7 +8,7 @@ def test_scheduler_payload_creates_timer_and_cron_resources_without_commands():
             "target_name": "pve",
             "timers": """Fri 10:00 5min Fri 09:55 5min backup.timer backup.service\n- - - - disabled.timer disabled.service\n""",
             "crontab": "@reboot secret-command --token abc\n0 2 * * * /usr/local/bin/backup",
-            "cron_files": "/etc/cron.d/proxmox-backup-cron\n/etc/cron.daily/logrotate\n",
+            "cron_files": "/etc/cron.d/proxmox-backup-cron\t0 3 * * *\n/etc/cron.daily/logrotate\n",
         }
     )
     jobs = [resource for resource in resources if resource.kind.value == "cron_job"]
@@ -16,6 +16,8 @@ def test_scheduler_payload_creates_timer_and_cron_resources_without_commands():
     assert all("secret-command" not in str(resource.metadata) for resource in resources)
     assert any(resource.metadata.get("schedule") == "@reboot" for resource in jobs)
     assert any(resource.metadata.get("unit") == "backup.timer" for resource in jobs)
+    assert any(resource.metadata.get("source_file") == "/etc/cron.d/proxmox-backup-cron" and resource.metadata.get("schedule") == "0 3 * * *" for resource in jobs)
+    assert any(resource.metadata.get("source_file") == "/etc/cron.daily/logrotate" and resource.metadata.get("schedule") == "@daily" for resource in jobs)
 
 
 def test_scheduler_payload_uses_stable_ids_and_maintenance_for_disabled_timer():

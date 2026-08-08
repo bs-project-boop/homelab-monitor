@@ -35,7 +35,10 @@ def automation_outputs_to_resources(payload: object) -> list[Resource]:
 
 
 def artifact_status(metadata: dict[str, Any]) -> Status:
-    if metadata.get("artifact_status") not in {"generated", "not_observed"}:
+    artifact_state = metadata.get("artifact_status")
+    if artifact_state not in {"generated", "not_observed"}:
+        return Status.UNKNOWN
+    if artifact_state == "not_observed":
         return Status.UNKNOWN
     github = str((metadata.get("github") or {}).get("status", "unknown"))
     discord = str((metadata.get("discord") or {}).get("status", "unknown"))

@@ -45,21 +45,13 @@ class ScheduledCollector:
                 errors=[{"source": "scheduler", "message": "collector_lock_busy"}],
             )
 
-        results: list[CollectionSourceResult] = []
-        for source in sources:
+        async def fetch_source(source: SourceDefinition) -> CollectionSourceResult:
             try:
-                result = await asyncio.wait_for(source.fetch(), timeout=timeout_seconds)
+                return await asyncio.wait_for(source.fetch(), timeout=timeout_seconds)
             except TimeoutError:
-                result = CollectionSourceResult(
-                    source=source.name,
-                    resources=[],
-                    errors=[f"timeout after {timeout_seconds:g}s"],
-                )
+                return CollectionSourceResult(source=source.name, resources=[], errors=[f"timeout after {timeout_seconds:g}s"])
             except Exception as exc:
-                result = CollectionSourceResult(
-                    source=source.name,
-                    resources=[],
-                    errors=[f"source failure: {type(exc).__name__}"],
-                )
-            results.append(result)
+                return CollectionSourceResult(source=source.name, resources=[], errors=[f"source failure: {type(exc).__name__}"])
+
+        results = list(await asyncio.gather(*(fetch_source(source) for source in sources)))
         return await CollectorOrchestrator(self.session).collect(results)

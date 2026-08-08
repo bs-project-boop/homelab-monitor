@@ -34,6 +34,17 @@ def _timer_job(group_id: str, fields: list[str]) -> Resource | None:
     )
 
 
+def _cron_file_schedule(entry: str) -> tuple[str, str]:
+    source, separator, schedule = entry.partition("\t")
+    source = source.strip()
+    if separator and schedule.strip():
+        return source, schedule.strip()
+    for folder, label in (("cron.hourly", "@hourly"), ("cron.daily", "@daily"), ("cron.weekly", "@weekly"), ("cron.monthly", "@monthly")):
+        if source.startswith(f"/etc/{folder}/"):
+            return source, label
+    return source, "unknown"
+
+
 def _cron_job(group_id: str, line: str, source: str, index: int) -> Resource:
     digest = hashlib.sha256(line.encode("utf-8", "replace")).hexdigest()[:12]
     return Resource(
@@ -66,12 +77,15 @@ def scheduler_payload_to_resources(payload: dict[str, Any]) -> list[Resource]:
             continue
         cron_index += 1
         resources.append(_cron_job(cron_group, line, "user-crontab", cron_index))
-    for path in str(payload.get("cron_files", "")).splitlines():
-        path = path.strip()
+    for entry in str(payload.get("cron_files", "")).splitlines():
+        entry = entry.strip()
+        if not entry:
+            continue
+        path, schedule = _cron_file_schedule(entry)
         if not path or path.endswith("/.placeholder"):
             continue
         cron_index += 1
-        resources.append(_cron_job(cron_group, path, path, cron_index))
+        resources.append(_cron_job(cron_group, schedule, path, cron_index))
     resources[0].metadata["job_count"] = sum(resource.parent_id == timers_group and resource.kind == ResourceKind.CRON_JOB for resource in resources)
     resources[1].metadata["job_count"] = sum(resource.parent_id == cron_group and resource.kind == ResourceKind.CRON_JOB for resource in resources)
     return resources
