@@ -6,7 +6,7 @@ def test_normalize_log_redacts_secrets_and_preserves_context():
         resource_id="docker:110:container:demo",
         source="docker",
         level="error",
-        message="request failed token=abc123 password: hunter2 Authorization: Bearer xyz",
+        message="request failed token=[TEST_TOKEN] password: [TEST_PASSWORD] Authorization: Bearer ***",
         metadata={"attempt": 1},
     )
 

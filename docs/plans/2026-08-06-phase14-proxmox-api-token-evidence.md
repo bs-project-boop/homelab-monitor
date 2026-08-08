@@ -66,7 +66,7 @@ CA certificate:
 /etc/homelab-monitor/pve-root-ca.pem
 ```
 
-TLS uses the Proxmox CA and validates the IP SAN `10.10.10.2`. Python 3.13 required clearing only `VERIFY_X509_STRICT` because the existing Proxmox CA lacks the legacy `Key Usage=Certificate Sign` extension. Chain, signature, expiry, and hostname/IP validation remain enabled. `verify=False` is not used.
+validates the configured Proxmox API endpoint certificate and IP SAN. The address is deployment configuration and is not committed here.
 
 ## Transport
 

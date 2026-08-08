@@ -21,7 +21,7 @@ async def test_proxmox_api_source_reads_read_only_state_and_schedule_endpoints()
 
     source = ProxmoxApiSource(
         base_url="https://pve.test:8006",
-        token="monitor@pve!collector=test-token",
+        token="monitor@pve!collector=[TEST_TOKEN]",
         ca_cert="/unused-in-mock-test.pem",
         node_name="pve",
         transport=httpx.MockTransport(handler),

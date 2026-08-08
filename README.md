@@ -35,7 +35,7 @@ LAN-only, read-only observability command center untuk homelab. Project ini mema
 Production runtime berjalan di LXC `112`:
 
 ```text
-Dashboard/Nginx : 10.10.10.55:18080
+Dashboard/Nginx : <monitoring-host>:18080
 API             : 127.0.0.1:18000
 Database        : PostgreSQL local-only via Unix socket
 ```
