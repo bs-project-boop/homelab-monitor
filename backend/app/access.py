@@ -90,7 +90,9 @@ def create_access_session(
     if not target or payload.mode not in target["modes"]:
         raise HTTPException(status_code=400, detail="target_mode_not_allowed")
     now = time.time()
-    sessions.clear()
+    for session_id, existing in list(sessions.items()):
+        if existing.expires_at <= now:
+            sessions.pop(session_id, None)
     session = Session(uuid.uuid4().hex, payload.target, payload.mode, now + SESSION_SECONDS)
     sessions[session.session_id] = session
     _audit({"event": "session_created", "session": session.session_id, "target": session.target, "mode": session.mode})

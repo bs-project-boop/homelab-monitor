@@ -28,8 +28,8 @@ def incident_candidate(resource: Resource) -> IncidentCandidate | None:
         return IncidentCandidate("open", resource.id, "availability", "warning", f"{resource.name} is degraded", resource.status)
     if resource.status is Status.DOWN:
         return IncidentCandidate("open", resource.id, "availability", "critical", f"{resource.name} is down", resource.status)
-    if resource.status is Status.UP:
-        return IncidentCandidate("resolve", resource.id, "availability", "info", f"{resource.name} recovered", resource.status)
+    if resource.status in {Status.UP, Status.MAINTENANCE}:
+        return IncidentCandidate("resolve", resource.id, "availability", "info", f"{resource.name} is {resource.status.value}", resource.status)
     return None
 
 

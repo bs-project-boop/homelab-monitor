@@ -309,7 +309,7 @@ function LogsTab({ logs, logsError, resources }: { logs: LogEntry[]; logsError: 
   const clearFilters = () => { setQuery(''); setLevel('all'); setSource('all') }
   const copyLog = async (log: LogEntry) => { await navigator.clipboard?.writeText(JSON.stringify(log, null, 2)) }
   const exportLogs = (format: 'json' | 'csv') => {
-    const body = format === 'json' ? JSON.stringify(filtered, null, 2) : ['id,observed_at,level,source,resource_id,message', ...filtered.map((log) => [log.id, log.observed_at, log.level, log.source, log.resource_id ?? '', log.message].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))].join('\\n')
+    const body = format === 'json' ? JSON.stringify(filtered, null, 2) : ['id,observed_at,level,source,resource_id,message', ...filtered.map((log) => [log.id, log.observed_at, log.level, log.source, log.resource_id ?? '', log.message].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))].join('\n')
     const blob = new Blob([body], { type: format === 'json' ? 'application/json' : 'text/csv' })
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `homelab-logs.${format}`; anchor.click(); URL.revokeObjectURL(url)
   }
