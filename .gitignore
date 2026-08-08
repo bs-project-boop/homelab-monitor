@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+*.pre-version-*
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Runtime and data
+artifacts/
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
