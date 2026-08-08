@@ -30,7 +30,16 @@ def _timer_job(group_id: str, fields: list[str]) -> Resource | None:
         source="systemd",
         status=Status.MAINTENANCE if disabled else Status.UP,
         parent_id=group_id,
-        metadata={"scheduler": "systemd", "unit": unit, "service": service, "next": fields[0][:80], "last": fields[3][:80] if len(fields) > 3 else "-"},
+        metadata={
+            "scheduler": "systemd",
+            "unit": unit,
+            "service": service,
+            "next": fields[0][:80],
+            "last": fields[3][:80] if len(fields) > 3 else "-",
+            "purpose": f"Menjalankan service systemd {service} berdasarkan timer {unit}.",
+            "scope": [unit, service],
+            "summary_source": "systemd timer/service evidence",
+        },
     )
 
 
@@ -47,6 +56,15 @@ def _cron_file_schedule(entry: str) -> tuple[str, str]:
 
 def _cron_job(group_id: str, line: str, source: str, index: int) -> Resource:
     digest = hashlib.sha256(line.encode("utf-8", "replace")).hexdigest()[:12]
+    if source.startswith("/etc/cron."):
+        purpose = f"Menjalankan job dari {source} sesuai jadwal { _cron_schedule(line) }."
+        basis = "cron file path dan bounded schedule evidence"
+    elif source == "user-crontab":
+        purpose = f"Menjalankan entry crontab user sesuai jadwal { _cron_schedule(line) }."
+        basis = "user crontab schedule evidence"
+    else:
+        purpose = f"Menjalankan cron entry dari {source} sesuai jadwal { _cron_schedule(line) }."
+        basis = "cron file schedule evidence"
     return Resource(
         id=f"{group_id}:job:cron:{_slug(source)}:{digest}:{index}",
         kind=ResourceKind.CRON_JOB,
@@ -54,7 +72,7 @@ def _cron_job(group_id: str, line: str, source: str, index: int) -> Resource:
         source="cron",
         status=Status.UP,
         parent_id=group_id,
-        metadata={"scheduler": "cron", "schedule": _cron_schedule(line), "source_file": source[:240]},
+        metadata={"scheduler": "cron", "schedule": _cron_schedule(line), "source_file": source[:240], "purpose": purpose, "scope": [source[:240]], "summary_source": basis},
     )
 
 
