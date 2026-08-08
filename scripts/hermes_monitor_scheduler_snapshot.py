@@ -3,6 +3,7 @@ from __future__ import annotations
 
 """Capture bounded, read-only systemd timer and cron metadata."""
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -26,15 +27,38 @@ def run(command: list[str], *, qga: bool = False) -> tuple[str, str | None]:
     return result.stdout[:65536], None
 
 
+def cron_file_schedule(content: str) -> str:
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*\\s*=", line):
+            continue
+        fields = line.split()
+        if fields and fields[0].startswith("@"):
+            return fields[0][:40]
+        if len(fields) >= 6:
+            return " ".join(fields[:5])[:80]
+    return "unknown"
+
+
 def cron_file_metadata(prefix: list[str], *, qga: bool = False) -> tuple[str, str | None]:
     # Return only path + bounded schedule fields; never transport raw cron commands.
-    script = r'''for f in $(find /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly -maxdepth 1 -type f -print); do
-case "$f" in
-  /etc/cron.d/*) schedule=$(awk 'BEGIN{IGNORECASE=1} /^[[:space:]]*#/ || /^[[:space:]]*$/ || /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {next} $1 ~ /^@/ {print $1; exit} NF >= 6 {print $1" "$2" "$3" "$4" "$5; exit}' "$f"); printf '%s\t%s\n' "$f" "$schedule" ;;
-  *) printf '%s\n' "$f" ;;
-esac
-done'''
-    return run(prefix + ["/bin/sh", "-c", script], qga=qga)
+    paths, error = run(prefix + ["find", "/etc/cron.d", "/etc/cron.hourly", "/etc/cron.daily", "/etc/cron.weekly", "/etc/cron.monthly", "-maxdepth", "1", "-type", "f", "-print"], qga=qga)
+    if error:
+        return "", error
+    entries: list[str] = []
+    for path in paths.splitlines():
+        path = path.strip()
+        if not path:
+            continue
+        if path.startswith("/etc/cron.d/"):
+            content, content_error = run(prefix + ["head", "-n", "64", path], qga=qga)
+            if content_error:
+                entries.append(f"{path}\tunknown")
+            else:
+                entries.append(f"{path}\t{cron_file_schedule(content)}")
+        else:
+            entries.append(path)
+    return "\n".join(entries), None
 
 
 def target(target_id: str, target_name: str, prefix: list[str], *, qga: bool = False) -> dict[str, object]:

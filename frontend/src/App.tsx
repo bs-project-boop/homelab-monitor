@@ -81,7 +81,7 @@ function SchedulerPanel({ resources, error }: { resources: Resource[]; error: bo
   const [status, setStatus] = useState('all')
   const [sort, setSort] = useState('name')
   const [profile, setProfile] = useState('all')
-  const [showSystem, setShowSystem] = useState(false)
+  const [showSystem, setShowSystem] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const profiles = resources.filter((resource) => resource.kind === 'cron_profile' && resource.source === 'hermes' && resources.some((owner) => owner.id === resource.parent_id && owner.kind === 'hermes_profile'))
   const jobs = resources.filter((resource) => classifyScheduler(resource, resources) === 'hermes_profile')
