@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { createAccessSession, fetchAutomationOutputs, fetchIncidents, fetchLogs, fetchOverview, fetchResources, fetchResourceStatusEvents, fetchStatusEvents, fetchVersions, revokeAccessSession, type AccessSession, type AutomationOutput, type Incident, type LogEntry, type MonitorStatus, type OverviewData, type Resource, type StatusEvent } from './api'
+import { ExecutiveSchedulerPanel } from './ExecutiveSchedulerPanel'
 import { classifyScheduler, explainCron, type CronExplanation } from './cron'
 import { sortByStatusThenName, statusLabel, versionInfo, type UpdateState } from './inventory'
 
@@ -295,7 +296,7 @@ function ServersAppsPanel({ resources }: { resources: Resource[] }) {
 }
 
 function CronTab({ resources, error }: { resources: Resource[]; error: boolean }) {
-  return <section id="cron-panel" aria-label="Cron & scheduled jobs"><SchedulerPanel resources={resources} error={error} /></section>
+  return <section id="cron-panel" aria-label="Cron & scheduled jobs"><ExecutiveSchedulerPanel resources={resources} error={error} /></section>
 }
 
 function LogsTab({ logs, logsError, resources }: { logs: LogEntry[]; logsError: boolean; resources: Resource[] }) {

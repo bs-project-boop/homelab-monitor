@@ -42,6 +42,22 @@ def _status(item: dict[str, Any], *, disable_key: str) -> Status:
 def _job_resource(group_id: str, kind: str, item: dict[str, Any]) -> Resource:
     job_id = _slug(item.get("id", item.get("name", "unknown")))
     metadata: dict[str, Any] = {"job_type": kind}
+    if kind == "backup":
+        metadata.update({
+            "purpose_category": "backup_recovery",
+            "purpose_title": "Workload backup",
+            "purpose_summary": "Membuat recovery point untuk virtual machine atau container yang ditargetkan.",
+            "impact_if_failed": "Tidak ada recovery point baru; pemulihan dapat bergantung pada backup yang lebih lama.",
+            "purpose_confidence": "high",
+        })
+    elif kind == "replication":
+        metadata.update({
+            "purpose_category": "backup_recovery",
+            "purpose_title": "Workload replication",
+            "purpose_summary": "Menjaga salinan workload pada target replikasi untuk kebutuhan disaster recovery.",
+            "impact_if_failed": "Salinan disaster recovery menjadi stale dan RPO dapat terlampaui.",
+            "purpose_confidence": "high",
+        })
     for input_key, output_key in _ALLOWED_FIELDS.items():
         if input_key in item and item[input_key] not in (None, ""):
             value = item[input_key]
