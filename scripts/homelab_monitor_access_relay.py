@@ -13,6 +13,7 @@ from pathlib import Path
 
 SOCKET = Path(os.environ.get("ACCESS_RELAY_SOCKET", "/run/homelab-monitor/access-relay.sock"))
 MAX_LINE = 16_384
+SESSION_SECONDS = 7_200
 ALLOWED_UID = int(os.environ.get("ACCESS_RELAY_ALLOWED_UID", "100999"))
 
 # Commands are fixed by target and mode. Client input is never used to build a command.
