@@ -14,6 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDiscon
 from pydantic import BaseModel, Field
 
 TOKEN_PATH = Path(os.getenv("OPERATOR_TOKEN_FILE", "/etc/homelab-monitor/operator-token"))
+RECOVERY_PATH = Path(os.getenv("OPERATOR_RECOVERY_FILE", "/etc/homelab-monitor/operator-recovery"))
 RELAY_SOCKET = os.getenv("ACCESS_RELAY_SOCKET", "/run/homelab-monitor/access-relay.sock")
 AUDIT_PATH = Path(os.getenv("ACCESS_AUDIT_FILE", "/var/log/homelab-monitor/access-broker.jsonl"))
 SESSION_SECONDS = 7200
@@ -39,6 +40,15 @@ class CreateSessionRequest(BaseModel):
     mode: Literal["shell", "logs"] = "logs"
 
 
+class BootstrapSecretRequest(BaseModel):
+    recovery_secret: str = Field(min_length=32, max_length=256)
+
+
+class BootstrapResponse(BaseModel):
+    operator_token: str
+    recovery_secret: str
+
+
 class SessionResponse(BaseModel):
     session_id: str
     target: str
@@ -50,13 +60,31 @@ router = APIRouter(prefix="/api/v1/access", tags=["access"])
 sessions: dict[str, Session] = {}
 
 
-def _token() -> str:
+def _read_secret(path: Path) -> str | None:
     try:
-        value = TOKEN_PATH.read_text(encoding="utf-8").strip()
-    except OSError as exc:
-        raise HTTPException(status_code=503, detail="operator_auth_not_configured") from exc
-    if len(value) < 32:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value if len(value) >= 32 else None
+
+
+def _write_secret(path: Path, value: str) -> None:
+    path.parent.mkdir(mode=0o750, exist_ok=True)
+    path.write_text(value + "\n", encoding="utf-8")
+    os.chmod(path, 0o640)
+
+
+def _token() -> str:
+    value = _read_secret(TOKEN_PATH)
+    if value is None:
         raise HTTPException(status_code=503, detail="operator_auth_not_configured")
+    return value
+
+
+def _recovery_secret() -> str:
+    value = _read_secret(RECOVERY_PATH)
+    if value is None:
+        raise HTTPException(status_code=503, detail="recovery_not_configured")
     return value
 
 
@@ -66,10 +94,44 @@ def _authorized(authorization: str | None) -> bool:
     return bool(supplied) and secrets.compare_digest(supplied, expected)
 
 
+def _recovery_authorized(supplied: str) -> bool:
+    return bool(supplied) and secrets.compare_digest(supplied.strip(), _recovery_secret())
+
+
 def _audit(event: dict[str, object]) -> None:
     AUDIT_PATH.parent.mkdir(mode=0o750, exist_ok=True)
     with AUDIT_PATH.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps({"ts": time.time(), **event}, separators=(",", ":")) + "\n")
+
+
+@router.get("/bootstrap/status")
+def bootstrap_status() -> dict[str, bool]:
+    return {"configured": _read_secret(TOKEN_PATH) is not None, "recovery_available": _read_secret(RECOVERY_PATH) is not None}
+
+
+@router.post("/bootstrap/enroll", response_model=BootstrapResponse, status_code=201)
+def bootstrap_enroll() -> BootstrapResponse:
+    if _read_secret(TOKEN_PATH) is not None:
+        raise HTTPException(status_code=409, detail="operator_auth_already_configured")
+    operator_token = secrets.token_urlsafe(48)
+    recovery_secret = secrets.token_urlsafe(48)
+    _write_secret(TOKEN_PATH, operator_token)
+    _write_secret(RECOVERY_PATH, recovery_secret)
+    _audit({"event": "operator_bootstrap_enrolled"})
+    return BootstrapResponse(operator_token=operator_token, recovery_secret=recovery_secret)
+
+
+@router.post("/bootstrap/recover", response_model=BootstrapResponse)
+def bootstrap_recover(payload: BootstrapSecretRequest) -> BootstrapResponse:
+    if not _recovery_authorized(payload.recovery_secret):
+        raise HTTPException(status_code=401, detail="invalid_recovery_secret")
+    operator_token = secrets.token_urlsafe(48)
+    recovery_secret = secrets.token_urlsafe(48)
+    _write_secret(TOKEN_PATH, operator_token)
+    _write_secret(RECOVERY_PATH, recovery_secret)
+    sessions.clear()
+    _audit({"event": "operator_bootstrap_recovered"})
+    return BootstrapResponse(operator_token=operator_token, recovery_secret=recovery_secret)
 
 
 @router.get("/targets")

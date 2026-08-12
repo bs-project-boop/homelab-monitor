@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { createAccessSession, fetchAutomationOutputs, fetchIncidents, fetchLogs, fetchOverview, fetchResources, fetchResourceStatusEvents, fetchStatusEvents, fetchVersions, revokeAccessSession, type AccessSession, type AutomationOutput, type Incident, type LogEntry, type MonitorStatus, type OverviewData, type Resource, type StatusEvent } from './api'
+import { createAccessSession, enrollOperator, fetchAutomationOutputs, fetchBootstrapStatus, fetchIncidents, fetchLogs, fetchOverview, fetchResources, fetchResourceStatusEvents, fetchStatusEvents, fetchVersions, recoverOperator, revokeAccessSession, type AccessSession, type AutomationOutput, type Incident, type LogEntry, type MonitorStatus, type OverviewData, type Resource, type StatusEvent } from './api'
 import { ExecutiveSchedulerPanel } from './ExecutiveSchedulerPanel'
 import { classifyScheduler, explainCron, type CronExplanation } from './cron'
 import { sortByStatusThenName, statusLabel, versionInfo, type UpdateState } from './inventory'
@@ -173,6 +173,9 @@ function ResourceExplorer({ resources, selectedId, onSelect, logs, logsLoading, 
 
 function AccessConsole({ resources }: { resources: Resource[] }) {
   const [token, setToken] = useState('')
+  const [recoverySecret, setRecoverySecret] = useState('')
+  const [bootstrapStatus, setBootstrapStatus] = useState<{ configured: boolean; recovery_available: boolean } | null>(null)
+  const [issuedSecrets, setIssuedSecrets] = useState<{ operator_token: string; recovery_secret: string } | null>(null)
   const [target, setTarget] = useState('pve')
   const [mode, setMode] = useState<'logs' | 'shell'>('logs')
   const [session, setSession] = useState<AccessSession | null>(null)
@@ -180,8 +183,14 @@ function AccessConsole({ resources }: { resources: Resource[] }) {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const targets = [{ id: 'pve', label: 'Proxmox node' }, ...resources.filter((resource) => resource.kind === 'lxc').map((resource) => { const vmid = resource.metadata.vmid ?? resource.id.match(/(?:lxc|ct)[:/-](\d+)/)?.[1] ?? resource.name; return { id: `lxc-${vmid}`, label: `LXC ${vmid} · ${resource.name}` } }), { id: 'worker-recyclarr', label: 'Docker worker · recyclarr' }, { id: 'worker-unpackerr', label: 'Docker worker · unpackerr' }]
+  const targets = [{ id: 'pve', label: 'Proxmox node' }, ...resources.filter((resource) => resource.kind === 'lxc').map((resource) => { const vmid = resource.metadata.vmid ?? resource.id.match(/(?:lxc|ct)[:/\\-](\\d+)/)?.[1] ?? resource.name; return { id: `lxc-${vmid}`, label: `LXC ${vmid} · ${resource.name}` } }), { id: 'worker-recyclarr', label: 'Docker worker · recyclarr' }, { id: 'worker-unpackerr', label: 'Docker worker · unpackerr' }]
   const canShell = target === 'pve' || target.startsWith('lxc-')
+
+  useEffect(() => { void fetchBootstrapStatus().then(setBootstrapStatus).catch(() => setError('Unable to check operator setup')) }, [])
+
+  const showIssuedSecrets = (secrets: { operator_token: string; recovery_secret: string }) => { setIssuedSecrets(secrets); setToken(secrets.operator_token); setRecoverySecret('') }
+  const enroll = async () => { setBusy(true); setError(null); try { showIssuedSecrets(await enrollOperator()); setBootstrapStatus({ configured: true, recovery_available: true }) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to create operator access') } finally { setBusy(false) } }
+  const recover = async () => { if (recoverySecret.trim().length < 32) { setError('Recovery secret must be at least 32 characters'); return }; setBusy(true); setError(null); try { showIssuedSecrets(await recoverOperator(recoverySecret.trim())); setBootstrapStatus({ configured: true, recovery_available: true }) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to recover operator access') } finally { setBusy(false) } }
 
   const socketRef = useRef<WebSocket | null>(null)
   useEffect(() => {
@@ -225,6 +234,9 @@ function AccessConsole({ resources }: { resources: Resource[] }) {
   return (
     <section className="access-console" aria-labelledby="access-console-title">
       <div className="panel-heading"><div><p className="eyebrow">CONTROLLED ACCESS</p><h3 id="access-console-title">Live logs & SSH console</h3><p className="muted">Authenticated, allowlisted, audited, and time-limited.</p></div><span className={`access-state ${session ? 'active' : ''}`}>{session ? 'Session active' : 'No session'}</span></div>
+      {bootstrapStatus && !bootstrapStatus.configured && <div className="access-bootstrap"><p className="label">FIRST-TIME OPERATOR SETUP</p><p className="muted">No operator access is configured. Create a token and recovery secret once, then store both in a password manager.</p><button type="button" className="refresh-button" onClick={() => void enroll()} disabled={busy}>Create operator access</button></div>}
+      {bootstrapStatus?.configured && bootstrapStatus.recovery_available && !session && <div className="access-recovery"><label><span className="label">Recovery secret</span><input type="password" value={recoverySecret} onChange={(event) => setRecoverySecret(event.target.value)} placeholder="Use only to rotate lost operator access" autoComplete="off" /></label><button type="button" className="refresh-button" onClick={() => void recover()} disabled={busy}>Rotate operator access</button></div>}
+      {issuedSecrets && <div className="access-issued" role="status"><strong>Save these values now. They will not be shown again.</strong><label>Operator token<input readOnly value={issuedSecrets.operator_token} onFocus={(event) => event.currentTarget.select()} /></label><label>Recovery secret<input readOnly value={issuedSecrets.recovery_secret} onFocus={(event) => event.currentTarget.select()} /></label><button type="button" className="refresh-button" onClick={() => setIssuedSecrets(null)}>I saved them</button></div>}
       <div className="access-controls"><label><span className="label">Operator token</span><input type="password" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Enter one-time operator token" autoComplete="off" disabled={Boolean(session)} /></label><label><span className="label">Target</span><select value={target} onChange={(event) => { setTarget(event.target.value); if (event.target.value.startsWith('worker-')) setMode('logs') }} disabled={Boolean(session)}>{targets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><label><span className="label">Mode</span><select value={mode} onChange={(event) => setMode(event.target.value as 'logs' | 'shell')} disabled={Boolean(session) || !canShell}><option value="logs">Read-only live logs</option><option value="shell">Interactive SSH console</option></select></label>{session ? <button type="button" className="danger-button" onClick={() => void close()}>Revoke session</button> : <button type="button" className="refresh-button" onClick={() => void open()} disabled={busy}>{busy ? 'Opening…' : 'Open session'}</button>}</div>
       {error && <p className="access-error" role="alert">{error}</p>}
       <pre className="terminal-output" aria-label="Live access output">{output || 'Session output will appear here. Read-only logs are the default.'}</pre>

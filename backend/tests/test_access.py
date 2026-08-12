@@ -15,6 +15,39 @@ def configure_test_auth(tmp_path, monkeypatch):
     return "a" * 64
 
 
+def test_bootstrap_status_reports_configured(tmp_path, monkeypatch) -> None:
+    configure_test_auth(tmp_path, monkeypatch)
+    response = client.get("/api/v1/access/bootstrap/status")
+    assert response.status_code == 200
+    assert response.json() == {"configured": True, "recovery_available": False}
+
+
+def test_bootstrap_enrolls_when_unconfigured(tmp_path, monkeypatch) -> None:
+    token_path = tmp_path / "operator-token"
+    recovery_path = tmp_path / "operator-recovery"
+    monkeypatch.setattr("app.access.TOKEN_PATH", token_path)
+    monkeypatch.setattr("app.access.RECOVERY_PATH", recovery_path)
+    monkeypatch.setattr("app.access.AUDIT_PATH", tmp_path / "audit.jsonl")
+    response = client.post("/api/v1/access/bootstrap/enroll")
+    assert response.status_code == 201
+    body = response.json()
+    assert len(body["operator_token"]) >= 32
+    assert len(body["recovery_secret"]) >= 32
+    assert client.post("/api/v1/access/bootstrap/enroll").status_code == 409
+
+
+def test_bootstrap_recovery_rotates_operator_and_recovery_secrets(tmp_path, monkeypatch) -> None:
+    old_token = configure_test_auth(tmp_path, monkeypatch)
+    recovery_path = tmp_path / "operator-recovery"
+    recovery_path.write_text("r" * 64)
+    monkeypatch.setattr("app.access.RECOVERY_PATH", recovery_path)
+    response = client.post("/api/v1/access/bootstrap/recover", json={"recovery_secret": "r" * 64})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["operator_token"] != old_token
+    assert client.post("/api/v1/access/bootstrap/recover", json={"recovery_secret": "r" * 64}).status_code == 401
+
+
 def test_access_requires_operator_token(tmp_path, monkeypatch) -> None:
     configure_test_auth(tmp_path, monkeypatch)
     response = client.post("/api/v1/access/sessions", json={"target": "pve", "mode": "logs"})

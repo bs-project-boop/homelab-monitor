@@ -68,6 +68,16 @@ export interface AccessSession {
   expires_at: number
 }
 
+export interface BootstrapStatus {
+  configured: boolean
+  recovery_available: boolean
+}
+
+export interface BootstrapResponse {
+  operator_token: string
+  recovery_secret: string
+}
+
 export interface VersionCheck {
   current_version: string | null
   latest_version: string | null
@@ -231,6 +241,24 @@ export async function fetchResourceStatusEvents(
   const response = await fetcher(endpoint, { headers: { Accept: 'application/json' } })
   if (!response.ok) throw new Error('Unable to load scheduler run history')
   return (await response.json()) as StatusEventResponse
+}
+
+export async function fetchBootstrapStatus(fetcher: FetchLike = (...args) => globalThis.fetch(...args)): Promise<BootstrapStatus> {
+  const response = await fetcher('/api/v1/access/bootstrap/status', { headers: { Accept: 'application/json' } })
+  if (!response.ok) throw new Error('Unable to check operator setup')
+  return (await response.json()) as BootstrapStatus
+}
+
+export async function enrollOperator(fetcher: FetchLike = (...args) => globalThis.fetch(...args)): Promise<BootstrapResponse> {
+  const response = await fetcher('/api/v1/access/bootstrap/enroll', { method: 'POST', headers: { Accept: 'application/json' } })
+  if (!response.ok) throw new Error(response.status === 409 ? 'Operator access is already configured' : 'Unable to create operator access')
+  return (await response.json()) as BootstrapResponse
+}
+
+export async function recoverOperator(recoverySecret: string, fetcher: FetchLike = (...args) => globalThis.fetch(...args)): Promise<BootstrapResponse> {
+  const response = await fetcher('/api/v1/access/bootstrap/recover', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ recovery_secret: recoverySecret }) })
+  if (!response.ok) throw new Error(response.status === 401 ? 'Invalid recovery secret' : 'Unable to recover operator access')
+  return (await response.json()) as BootstrapResponse
 }
 
 export async function createAccessSession(
