@@ -1,0 +1,22 @@
+[Unit]
+Description=Homelab Monitor controlled access relay
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/homelab-monitor-access-relay
+Restart=on-failure
+RestartSec=2s
+ExecStartPost=/usr/bin/chown root:root /run/homelab-monitor/access-relay.sock
+ExecStartPost=/usr/bin/chmod 0666 /run/homelab-monitor/access-relay.sock
+User=root
+Group=root
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/run/homelab-monitor
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
