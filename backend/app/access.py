@@ -222,9 +222,12 @@ async def access_stream(websocket: WebSocket, session_id: str) -> None:
         try:
             writer.write(b'{"type":"close"}\n')
             await writer.drain()
-        except (ConnectionError, RuntimeError):
+        except (ConnectionError, RuntimeError, BrokenPipeError):
             pass
         writer.close()
-        await writer.wait_closed()
+        try:
+            await writer.wait_closed()
+        except (ConnectionError, BrokenPipeError):
+            pass
         sessions.pop(session_id, None)
         _audit({"event": "session_closed", "session": session.session_id, "target": session.target, "mode": session.mode})
