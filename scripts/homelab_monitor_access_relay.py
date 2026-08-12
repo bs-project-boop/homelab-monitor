@@ -6,20 +6,21 @@ import json
 import os
 import selectors
 import socket
-import struct
 import subprocess
-import sys
+import threading
 import time
 from pathlib import Path
 
 SOCKET = Path(os.environ.get("ACCESS_RELAY_SOCKET", "/run/homelab-monitor/access-relay.sock"))
 MAX_LINE = 16_384
-SESSION_SECONDS = 7_200
+ALLOWED_UID = int(os.environ.get("ACCESS_RELAY_ALLOWED_UID", "100999"))
 
 # Commands are fixed by target and mode. Client input is never used to build a command.
 TARGETS: dict[str, tuple[str, ...]] = {
     "pve": ("host",),
     **{f"lxc-{vmid}": ("lxc", str(vmid)) for vmid in (101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 112, 997)},
+    "worker-recyclarr": ("docker", "110", "recyclarr"),
+    "worker-unpackerr": ("docker", "110", "unpackerr"),
 }
 
 
@@ -32,6 +33,10 @@ def command_for(target: str, mode: str) -> list[str]:
         if mode != "logs":
             raise ValueError("target_mode_not_allowed")
         return ["/usr/bin/journalctl", "-n", "100", "--no-pager", "-o", "short-iso"]
+    if spec[0] == "docker":
+        if mode != "logs":
+            raise ValueError("target_mode_not_allowed")
+        return ["/usr/sbin/pct", "exec", spec[1], "--", "/usr/bin/docker", "logs", "--tail", "100", spec[2]]
     vmid = spec[1]
     if mode == "logs":
         return ["/usr/sbin/pct", "exec", vmid, "--", "/usr/bin/journalctl", "-n", "100", "--no-pager", "-o", "short-iso"]
@@ -100,6 +105,20 @@ def run_session(conn: socket.socket, request: dict[str, object]) -> None:
         proc.stdout.close()
 
 
+def serve_connection(conn: socket.socket) -> None:
+    with conn:
+        try:
+            conn.settimeout(5)
+            raw = conn.recv(MAX_LINE)
+            request = json.loads(raw.splitlines()[0])
+            run_session(conn, request)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            try:
+                send_line(conn, {"type": "error", "error": str(exc)[:120]})
+            except OSError:
+                pass
+
+
 def main() -> int:
     SOCKET.parent.mkdir(mode=0o755, exist_ok=True)
     try:
@@ -112,17 +131,7 @@ def main() -> int:
     listener.listen(8)
     while True:
         conn, _ = listener.accept()
-        with conn:
-            try:
-                conn.settimeout(5)
-                raw = conn.recv(MAX_LINE)
-                request = json.loads(raw.splitlines()[0])
-                run_session(conn, request)
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
-                try:
-                    send_line(conn, {"type": "error", "error": str(exc)[:120]})
-                except OSError:
-                    pass
+        threading.Thread(target=serve_connection, args=(conn,), daemon=True).start()
     return 0
 
 
