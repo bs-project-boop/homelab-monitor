@@ -473,13 +473,31 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [])
 
+  const navItems: Array<{ id: TabKey; label: string; detail: string; glyph: string }> = [
+    { id: 'overview', label: 'Command center', detail: 'Health & attention', glyph: '⌂' },
+    { id: 'servers', label: 'Servers & Apps', detail: `${resources.length || '—'} observed resources`, glyph: '▦' },
+    { id: 'cron', label: 'Scheduled work', detail: 'Cron & workers', glyph: '◷' },
+    { id: 'logs', label: 'Evidence logs', detail: 'Normalized stream', glyph: '≡' },
+    { id: 'outputs', label: 'Artifacts', detail: 'Delivery evidence', glyph: '↗' },
+  ]
+  const pageTitle = activeTab === 'overview' ? 'Command center' : navItems.find((item) => item.id === activeTab)?.label ?? 'Homelab Monitor'
+  const attentionCount = data ? (data.status_counts.degraded ?? 0) + (data.status_counts.down ?? 0) : 0
   return (
-    <main className="shell">
-      <header className="topbar"><div><p className="eyebrow">HOMELAB CONTROL CENTER</p><h1>{activeTab === 'overview' ? 'Monitoring overview' : activeTab === 'servers' ? 'Servers & Apps' : activeTab === 'outputs' ? 'Artifacts & Delivery' : 'Logs'}</h1><p className="subtitle">A quiet, evidence-backed view of your local infrastructure.</p></div><div className="header-actions"><span className="scope">Local only <span>·</span> Read-only</span><button className="refresh-button" type="button" onClick={() => void loadDashboard()} disabled={refreshing} aria-label="Refresh monitoring overview">{refreshing ? 'Refreshing…' : 'Refresh'}</button></div></header>
-      <CollectorPulse events={events} latestStatus={data?.latest_collector_run?.status} />
-      <TabNav active={activeTab} onChange={setActiveTab} />
-      {error ? <section className="state-panel error-state" role="alert"><strong>Unable to load overview</strong><p>{error}</p></section> : data ? <OverviewContent data={data} events={events} incidents={incidents} incidentsError={incidentsError} resources={resources} resourcesError={resourcesError} outputs={outputs} outputsError={outputsError} selectedId={selectedId} onSelect={setSelectedId} logs={logs} logsLoading={logsLoading} logsError={logsError} activeTab={activeTab} /> : <section className="state-panel" aria-live="polite"><span className="loader" />Loading observed inventory…</section>}
-      <footer className="footer"><span>HOMELAB MONITOR</span><span>{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Waiting for data'} · Read-only observability</span></footer>
+    <main className="control-room">
+      <aside className="side-rail" aria-label="Primary navigation">
+        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">✦</span><div><strong>HOMELAB</strong><span>MONITOR</span></div></div>
+        <div className="rail-section-label">WORKSPACE</div>
+        <nav className="rail-nav" aria-label="Workspace sections">{navItems.map((item) => <button key={item.id} type="button" className={`rail-item ${activeTab === item.id ? 'active' : ''}`} aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => setActiveTab(item.id)}><span className="rail-glyph" aria-hidden="true">{item.glyph}</span><span><strong>{item.label}</strong><small>{item.detail}</small></span>{item.id === 'overview' && attentionCount > 0 && <b className="rail-badge">{attentionCount}</b>}</button>)}</nav>
+        <div className="rail-spacer" />
+        <div className="rail-status"><span className="status-orb" aria-hidden="true" /><div><strong>Local observability</strong><small>Read-only control plane</small></div></div>
+      </aside>
+      <section className="room-main">
+        <header className="room-header"><div><p className="eyebrow">LOCAL CONTROL PLANE <span className="header-dot" /> EVIDENCE FIRST</p><h1>{pageTitle}</h1><p className="subtitle">A calm, operational view of your infrastructure and its evidence.</p></div><div className="room-actions"><span className="last-seen">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Awaiting collector'}</span><button className="refresh-button" type="button" onClick={() => void loadDashboard()} disabled={refreshing} aria-label="Refresh monitoring overview"><span aria-hidden="true">↻</span>{refreshing ? 'Refreshing…' : 'Refresh'}</button></div></header>
+        <div className="room-context"><span className="context-chip"><i className="status-orb" />Local only</span><span className="context-chip">Read-only by default</span><span className="context-spacer" />{data && <span className="context-freshness">Collector: <strong>{data.latest_collector_run?.status ?? 'unknown'}</strong></span>}</div>
+        <CollectorPulse events={events} latestStatus={data?.latest_collector_run?.status} />
+        {error ? <section className="state-panel error-state" role="alert"><strong>Unable to load overview</strong><p>{error}</p></section> : data ? <OverviewContent data={data} events={events} incidents={incidents} incidentsError={incidentsError} resources={resources} resourcesError={resourcesError} outputs={outputs} outputsError={outputsError} selectedId={selectedId} onSelect={setSelectedId} logs={logs} logsLoading={logsLoading} logsError={logsError} activeTab={activeTab} /> : <section className="state-panel" aria-live="polite"><span className="loader" />Loading observed inventory…</section>}
+        <footer className="footer"><span>HOMELAB MONITOR · READ-ONLY OBSERVABILITY</span><span>All status is derived from observed evidence</span></footer>
+      </section>
     </main>
   )
 }
